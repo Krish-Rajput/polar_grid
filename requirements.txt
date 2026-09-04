@@ -1,0 +1,19 @@
+# PolarGrid AI Dependencies
+# For local development and Vercel deployment
+
+# Web Framework
+fastapi>=0.100.0
+uvicorn>=0.20.0
+
+# ML & Data Science
+scikit-learn>=1.0.0
+numpy>=1.24.0
+pandas>=2.0.0,<3.0.0
+scipy>=1.10.0
+xgboost>=1.7.0
+
+# Vercel Serverless (FastAPI → AWS Lambda adapter)
+mangum>=0.17.0
+
+# Optional: For enhanced performance
+# python-multipart>=0.0.6

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PolarGrid AI — Smart Energy Management for Polar Research Stations</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-logo">🧊 PolarGrid AI</div>
+        <div class="loading-spinner"></div>
+        <p style="color: var(--text-muted); margin-top: 1rem; font-size: 0.85rem;">Initializing AI Energy Management System...</p>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <span class="logo-icon">🧊</span>
+            <div>
+                <div class="header-title">PolarGrid AI</div>
+                <div class="header-subtitle">AI-Driven Smart Energy Management for Polar Research Stations | NCPOR / MoES</div>
+            </div>
+        </div>
+        <div class="header-right">
+            <select class="station-selector" id="stationSelector">
+                <option value="Maitri (Antarctica)">🇮🇳 Maitri (Antarctica)</option>
+                <option value="Bharati (Antarctica)">🇮 Bharati (Antarctica)</option>
+                <option value="Himadri (Arctic)">🇮🇳 Himadri (Arctic)</option>
+            </select>
+            <div class="status-badge">
+                <span class="status-dot"></span>
+                <span>SYSTEM ONLINE</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dashboard -->
+    <div class="main-container">
+        
+        <!-- KPI Cards Row 1 -->
+        <div class="section-header">
+            <span class="section-icon">⚡</span>
+            <span class="section-title">Real-Time Energy Status</span>
+            <span class="section-badge" id="updateTimestamp">Loading...</span>
+        </div>
+        <div class="kpi-grid" id="kpiGrid1">
+            <div class="kpi-card demand">
+                <div class="kpi-icon">🔌</div>
+                <div class="kpi-value" id="kpiDemand">-- kW</div>
+                <div class="kpi-label">Current Load Demand</div>
+                <div class="kpi-change positive" id="kpiDemandChange">--</div>
+            </div>
+            <div class="kpi-card solar">
+                <div class="kpi-icon">☀️</div>
+                <div class="kpi-value" id="kpiSolar">-- kW</div>
+                <div class="kpi-label">Solar Generation</div>
+                <div class="kpi-change positive" id="kpiSolarChange">--</div>
+            </div>
+            <div class="kpi-card wind">
+                <div class="kpi-icon">💨</div>
+                <div class="kpi-value" id="kpiWind">-- kW</div>
+                <div class="kpi-label">Wind Generation</div>
+                <div class="kpi-change positive" id="kpiWindChange">--</div>
+            </div>
+            <div class="kpi-card battery">
+                <div class="kpi-icon">🔋</div>
+                <div class="kpi-value" id="kpiBattery">--%</div>
+                <div class="kpi-label">Battery State of Charge</div>
+                <div class="kpi-change" id="kpiBatteryChange">--</div>
+            </div>
+            <div class="kpi-card generator">
+                <div class="kpi-icon">⚙️</div>
+                <div class="kpi-value" id="kpiGenerator">-- kW</div>
+                <div class="kpi-label">Generator Output</div>
+                <div class="kpi-change negative" id="kpiGeneratorChange">--</div>
+            </div>
+            <div class="kpi-card fuel">
+                <div class="kpi-icon"></div>
+                <div class="kpi-value" id="kpiDiesel">-- L</div>
+                <div class="kpi-label">Diesel (Last 24h)</div>
+                <div class="kpi-change positive" id="kpiDieselChange">--</div>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="tab-container">
+            <div class="tab active" data-tab="forecasting"> AI Forecasting</div>
+            <div class="tab" data-tab="optimization">⚡ Dispatch Optimization</div>
+            <div class="tab" data-tab="weather">🌡️ Weather Impact</div>
+            <div class="tab" data-tab="annual">📊 Annual Summary</div>
+            <div class="tab" data-tab="model"> Model Performance</div>
+        </div>
+
+        <!-- Tab: AI Forecasting -->
+        <div class="tab-content active" id="tab-forecasting">
+            <div class="section-header">
+                <span class="section-icon"></span>
+                <span class="section-title">AI-Powered Load & Renewable Forecasting</span>
+                <span class="section-badge">Hybrid Ensemble (XGBoost + RF + GB)</span>
+            </div>
+            <div class="charts-row">
+                <div class="chart-card">
+                    <div class="chart-title">🔌 Energy Demand: Actual vs AI Prediction</div>
+                    <div class="chart-container tall">
+                        <canvas id="demandForecastChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">☀️💨 Renewable Energy Generation Forecast</div>
+                    <div class="chart-container tall">
+                        <canvas id="renewableForecastChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Optimization -->
+        <div class="tab-content" id="tab-optimization">
+            <div class="section-header">
+                <span class="section-icon">⚡</span>
+                <span class="section-title">Optimal Energy Dispatch Schedule</span>
+                <span class="section-badge">Next 168 Hours (7 Days)</span>
+            </div>
+
+            <div class="chart-card" style="margin-bottom: 1.5rem;">
+                <div class="chart-title">📊 Energy Source Dispatch (Optimized)</div>
+                <div class="chart-container tall">
+                    <canvas id="dispatchChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Insights -->
+            <div class="insights-panel">
+                <div class="chart-title">💡 AI Optimization Insights</div>
+                <div id="insightsContainer"></div>
+            </div>
+
+            <!-- KPI Summary Cards -->
+            <div class="kpi-grid" id="summaryGrid">
+                <div class="kpi-card">
+                    <div class="kpi-icon">💰</div>
+                    <div class="kpi-value" id="sumCostSavings">--</div>
+                    <div class="kpi-label">Cost Savings (7 Days)</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-icon">⛽</div>
+                    <div class="kpi-value" id="sumFuelSavings">--</div>
+                    <div class="kpi-label">Fuel Saved</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-icon">🌍</div>
+                    <div class="kpi-value" id="sumCO2">--</div>
+                    <div class="kpi-label">CO₂ Reduction</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-icon">🌱</div>
+                    <div class="kpi-value" id="sumRenewable">--</div>
+                    <div class="kpi-label">Renewable Share</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Weather Impact -->
+        <div class="tab-content" id="tab-weather">
+            <div class="section-header">
+                <span class="section-icon">🌡️</span>
+                <span class="section-title">Weather-Energy Correlation Analysis</span>
+                <span class="section-badge">2-Year Historical Data</span>
+            </div>
+            <div class="charts-row">
+                <div class="chart-card">
+                    <div class="chart-title">🌡️ Temperature & Energy Demand Correlation</div>
+                    <div class="chart-container">
+                        <canvas id="weatherDemandChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">️ Solar Generation vs Day of Year</div>
+                    <div class="chart-container">
+                        <canvas id="solarMonthlyChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title"> Monthly Energy & Weather Trends</div>
+                <div class="chart-container">
+                    <canvas id="monthlyTrendsChart"></canvas>
+                </div>
+            </div>
+            <div class="insights-panel" style="margin-top: 1rem;">
+                <div class="chart-title">🔍 Weather Impact Analysis</div>
+                <div id="weatherInsightsContainer"></div>
+            </div>
+        </div>
+
+        <!-- Tab: Annual Summary -->
+        <div class="tab-content" id="tab-annual">
+            <div class="section-header">
+                <span class="section-icon">📊</span>
+                <span class="section-title">Annual Energy Performance Summary</span>
+            </div>
+            <div class="kpi-grid" id="annualKpiGrid">
+                <div class="kpi-card">
+                    <div class="kpi-icon">⚡</div>
+                    <div class="kpi-value" id="annualDemand">--</div>
+                    <div class="kpi-label">Total Demand (MWh)</div>
+                </div>
+                <div class="kpi-card solar">
+                    <div class="kpi-icon">☀️</div>
+                    <div class="kpi-value" id="annualSolar">--</div>
+                    <div class="kpi-label">Solar Generated (MWh)</div>
+                </div>
+                <div class="kpi-card wind">
+                    <div class="kpi-icon">💨</div>
+                    <div class="kpi-value" id="annualWind">--</div>
+                    <div class="kpi-label">Wind Generated (MWh)</div>
+                </div>
+                <div class="kpi-card fuel">
+                    <div class="kpi-icon"></div>
+                    <div class="kpi-value" id="annualDiesel">--</div>
+                    <div class="kpi-label">Diesel Consumed (kL)</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-icon">🌍</div>
+                    <div class="kpi-value" id="annualCO2">--</div>
+                    <div class="kpi-label">CO₂ Emissions (tonnes)</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-icon">💰</div>
+                    <div class="kpi-value" id="annualCost">--</div>
+                    <div class="kpi-label">Fuel Cost (₹ Lakhs)</div>
+                </div>
+            </div>
+
+            <div class="resupply-card">
+                <div class="chart-title">🚢 Optimal Fuel Resupply Plan</div>
+                <div class="resupply-timeline" id="resupplyTimeline"></div>
+            </div>
+
+            <div class="insights-panel">
+                <div class="chart-title"> Impact vs Traditional Diesel-Only Operation</div>
+                <div id="impactInsightsContainer"></div>
+            </div>
+        </div>
+
+        <!-- Tab: Model Performance -->
+        <div class="tab-content" id="tab-model">
+            <div class="section-header">
+                <span class="section-icon">🤖</span>
+                <span class="section-title">AI Model Performance & Architecture</span>
+                <span class="section-badge">Hybrid Ensemble</span>
+            </div>
+            <div class="charts-row">
+                <div class="chart-card">
+                    <div class="chart-title">📊 Feature Importance Ranking</div>
+                    <div class="chart-container">
+                        <canvas id="featureImportanceChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title"> Model Performance Comparison</div>
+                    <div class="chart-container">
+                        <canvas id="modelPerformanceChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-card" style="margin-top: 1rem;">
+                <div class="chart-title">🏗️ System Architecture</div>
+                <div id="architectureInfo" style="padding: 1rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.8;"></div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>PolarGrid AI</strong> — AI-Driven Smart Energy Management System for Polar Research Stations</p>
+            <p>Problem Statement 26061 | Skill India Hackathon 2026 | Ministry of Earth Sciences (MoES) / NCPOR</p>
+            <p style="margin-top: 0.5rem;">Built with ❤️ for India's Polar Research Program — Maitri • Bharati • Himadri</p>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
