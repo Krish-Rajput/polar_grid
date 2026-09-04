@@ -1,0 +1,11 @@
+*.png
+PolarGrid_AIH_SIH2026.pptx
+build_ppt.py
+run.bat
+INSTALL.md
+DEPLOYMENT.md
+SOLUTION.md
+LICENSE
+.git/
+.gitignore
+models/forecaster.pkl
