@@ -147,7 +147,7 @@ Generates physically-accurate synthetic data for polar stations:
 | **POLAR_NIGHT** | Zero solar (May-Aug) | Conserve battery, optimal generator load |
 | **BLIZZARD** | Wind >25 m/s | Generator-only, protect turbines |
 | **SUMMER_SURGE** | Solar >70% | Max renewables, charge battery, desalination |
-| **EMERGENCY** | Battery <15% | All generators, shed non-critical loads |
+| **EMERGENCY** | Battery <20% | All generators, shed non-critical loads |
 
 **Constraints:**
 - Battery SoC: 20-90% (cold-weather safe zone)
