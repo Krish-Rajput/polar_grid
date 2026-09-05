@@ -269,6 +269,159 @@ async def get_energy_flow_data(station: str = "Maitri (Antarctica)"):
     }
 
 
+@app.get("/api/current-mode")
+async def get_current_mode(station: str = "Maitri (Antarctica)"):
+    """Get current operating mode based on latest station conditions"""
+    if station not in station_data:
+        raise HTTPException(404, f"Station not found: {station}")
+
+    df = station_data[station]['raw_data']
+    last_hour = df.iloc[-1]
+
+    forecast = {
+        'avg_solar': max(0, last_hour['solar_generation_kw'] / 120),
+        'avg_wind': last_hour['wind_generation_kw'] / 50 if last_hour['wind_generation_kw'] > 0 else 0,
+        'temperature': last_hour['temperature'],
+        'wind_speed': last_hour['wind_speed'],
+        'battery_soc': last_hour['battery_soc_percent']
+    }
+
+    mode = optimizer.determine_operating_mode(forecast)
+
+    mode_info = {
+        'normal': {'label': 'Normal', 'icon': '✅', 'color': '#10b981',
+                   'desc': 'Balanced conditions. Renewables primary, battery secondary, generator backup.'},
+        'polar_night': {'label': 'Polar Night', 'icon': '', 'color': '#8b5cf6',
+                        'desc': 'Zero solar. Conserving battery, running generators at optimal 30-50% load.'},
+        'blizzard': {'label': 'Blizzard', 'icon': '🌨️', 'color': '#ef4444',
+                     'desc': 'Wind >25 m/s. Generator-only. Turbines feathered for safety.'},
+        'summer_surge': {'label': 'Summer Surge', 'icon': '☀️', 'color': '#f59e0b',
+                         'desc': 'Abundant solar. Maximizing renewables, charging batteries, powering desalination.'},
+        'emergency': {'label': 'Emergency', 'icon': '⚠️', 'color': '#f97316',
+                      'desc': 'Battery critical (<15%). All generators running. Non-critical loads shed.'}
+    }
+
+    info = mode_info.get(mode.value, mode_info['normal'])
+
+    return {
+        'station': station,
+        'timestamp': df.index[-1].isoformat(),
+        'current_mode': mode.value,
+        'mode_label': info['label'],
+        'mode_icon': info['icon'],
+        'mode_color': info['color'],
+        'mode_description': info['desc'],
+        'conditions': {
+            'temperature': round(last_hour['temperature'], 1),
+            'wind_speed': round(last_hour['wind_speed'], 1),
+            'solar_kw': round(last_hour['solar_generation_kw'], 1),
+            'battery_soc': round(last_hour['battery_soc_percent'], 1),
+            'demand_kw': round(last_hour['total_demand_kw'], 1),
+            'generator_kw': round(last_hour['generator_output_kw'], 1)
+        }
+    }
+
+
+@app.post("/api/simulate-mode")
+async def simulate_mode(station: str = "Maitri (Antarctica)",
+                        mode: str = "normal",
+                        hours_ahead: int = 72):
+    """Run simulation for a specific operating mode with realistic conditions"""
+    if station not in station_data:
+        raise HTTPException(404, f"Station not found")
+
+    from datetime import timedelta
+    data = station_data[station]
+    df = data['raw_data']
+    simulator = data['simulator']
+
+    # Define weather conditions that FORCE each mode
+    mode_conditions = {
+        'normal': {'temp': -15, 'wind': 12, 'solar_factor': 0.4, 'start_soc': 60},
+        'polar_night': {'temp': -35, 'wind': 18, 'solar_factor': 0.0, 'start_soc': 50},
+        'blizzard': {'temp': -25, 'wind': 28, 'solar_factor': 0.0, 'start_soc': 55},
+        'summer_surge': {'temp': -5, 'wind': 8, 'solar_factor': 0.95, 'start_soc': 40},
+        'emergency': {'temp': -40, 'wind': 20, 'solar_factor': 0.0, 'start_soc': 12}
+    }
+
+    cond = mode_conditions.get(mode, mode_conditions['normal'])
+
+    # Generate data and scale to force the mode
+    last_timestamp = df.index[-1]
+    forecast_df = simulator.generate_hourly_data(days=hours_ahead // 24 + 1,
+                                                  start_date=last_timestamp + timedelta(hours=1))
+
+    # Force conditions
+    forecast_df['temperature'] = cond['temp'] + np.random.normal(0, 2, len(forecast_df))
+    forecast_df['wind_speed'] = max(0, cond['wind'] + np.random.normal(0, 2, len(forecast_df)))
+    forecast_df['solar_generation_kw'] = (forecast_df['solar_generation_kw'] * cond['solar_factor'])
+    forecast_df['solar_generation_kw'] = forecast_df['solar_generation_kw'].clip(lower=0)
+
+    forecast_features = simulator.generate_features_for_ml(forecast_df)
+
+    # Predictions
+    try:
+        demand, (ci_l, ci_u) = forecaster.predict_with_uncertainty(forecast_features)
+        solar = renewable_forecaster.predict_solar(forecast_features)
+        wind = renewable_forecaster.predict_wind(forecast_features)
+    except Exception:
+        demand = forecast_df['total_demand_kw'].values
+        solar = forecast_df['solar_generation_kw'].values
+        wind = forecast_df['wind_generation_kw'].values
+        ci_l, ci_u = demand * 0.9, demand * 1.1
+
+    # Force solar/wind to match mode
+    solar = np.maximum(0, solar * cond['solar_factor'])
+    if mode == 'blizzard':
+        wind = np.zeros_like(wind)  # Turbines feathered
+
+    # Optimize
+    result = optimizer.optimize_dispatch(
+        demand_forecast=demand,
+        solar_forecast=solar,
+        wind_forecast=wind,
+        current_soc=cond['start_soc'],
+        temperature=cond['temp'],
+        wind_speed=cond['wind'],
+        hours_ahead=hours_ahead
+    )
+
+    mode_info = {
+        'normal': {'label': 'Normal', 'icon': '✅', 'color': '#10b981'},
+        'polar_night': {'label': 'Polar Night', 'icon': '', 'color': '#8b5cf6'},
+        'blizzard': {'label': 'Blizzard', 'icon': '🌨️', 'color': '#ef4444'},
+        'summer_surge': {'label': 'Summer Surge', 'icon': '☀️', 'color': '#f59e0b'},
+        'emergency': {'label': 'Emergency', 'icon': '⚠️', 'color': '#f97316'}
+    }
+    info = mode_info.get(mode, mode_info['normal'])
+
+    return {
+        'mode': mode,
+        'mode_label': info['label'],
+        'mode_icon': info['icon'],
+        'mode_color': info['color'],
+        'conditions': {
+            'temperature': cond['temp'],
+            'wind_speed': cond['wind'],
+            'solar_factor': cond['solar_factor'],
+            'start_soc': cond['start_soc']
+        },
+        'forecast': {
+            'timestamps': [t.isoformat() for t in forecast_df.index[:hours_ahead]],
+            'demand': [round(x, 1) for x in demand[:hours_ahead]],
+            'solar': [round(max(0, x), 1) for x in solar[:hours_ahead]],
+            'wind': [round(max(0, x), 1) for x in wind[:hours_ahead]]
+        },
+        'dispatch': result['dispatch'],
+        'summary': result['summary'],
+        'insights': optimizer.get_optimization_insights(result)
+    }
+
+
+# ============================================================
+# LEGACY ENDPOINTS BELOW
+# ============================================================
+
 @app.get("/api/dashboard")
 async def get_dashboard_data(station: str = "Maitri (Antarctica)", hours_ahead: int = 168):
     """Main dashboard data endpoint - returns comprehensive data for dashboard visualization"""

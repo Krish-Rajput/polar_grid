@@ -808,12 +808,15 @@ function updateArchitectureInfo(data) {
 // ===== MAIN UPDATE FUNCTION =====
 async function updateDashboard(station) {
     try {
-        const [dashboardData, modelData, weatherData, annualData] = await Promise.all([
+        const [dashboardData, modelData, weatherData, annualData, modeData] = await Promise.all([
             fetchDashboardData(station),
             fetchModelPerformance(),
             fetchWeatherImpact(),
-            fetchAnnualSummary(station)
+            fetchAnnualSummary(station),
+            fetchCurrentMode(station)
         ]);
+
+        if (modeData) updateCurrentModeCard(modeData);
 
         if (dashboardData) {
             updateKPIs(dashboardData);
@@ -872,11 +875,206 @@ function setupStationSelector() {
     });
 }
 
+// ===== CURRENT MODE FUNCTIONS =====
+async function fetchCurrentMode(station) {
+    try {
+        const response = await fetch(`/api/current-mode?station=${encodeURIComponent(station)}`);
+        if (!response.ok) return null;
+        return await response.json();
+    } catch (error) {
+        console.error('Current mode fetch error:', error);
+        return null;
+    }
+}
+
+async function simulateMode(station, mode, hours) {
+    try {
+        const response = await fetch(`/api/simulate-mode?station=${encodeURIComponent(station)}&mode=${mode}&hours_ahead=${hours}`, {
+            method: 'POST'
+        });
+        if (!response.ok) return null;
+        return await response.json();
+    } catch (error) {
+        console.error('Simulation error:', error);
+        return null;
+    }
+}
+
+function updateCurrentModeCard(data) {
+    if (!data) return;
+
+    const icon = document.getElementById('modeIcon');
+    const value = document.getElementById('modeValue');
+    const desc = document.getElementById('modeDesc');
+
+    icon.textContent = data.mode_icon;
+    value.textContent = data.mode_label;
+    value.style.color = data.mode_color;
+    desc.textContent = data.mode_description;
+
+    // Update card border color
+    const card = document.getElementById('currentModeCard');
+    card.style.borderLeftColor = data.mode_color;
+
+    // Update conditions
+    document.getElementById('condTemp').textContent = `${data.conditions.temperature}°C`;
+    document.getElementById('condWind').textContent = `${data.conditions.wind_speed} m/s`;
+    document.getElementById('condSolar').textContent = `${data.conditions.solar_kw} kW`;
+    document.getElementById('condSoc').textContent = `${data.conditions.battery_soc}%`;
+}
+
+function createSimDispatchChart(data) {
+    const ctx = document.getElementById('simDispatchChart');
+    if (!ctx) return;
+
+    if (charts.simDispatch) charts.simDispatch.destroy();
+
+    const labels = data.dispatch.timestamps;
+    const dispatch = data.dispatch;
+
+    charts.simDispatch = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Demand',
+                    data: dispatch.demand,
+                    backgroundColor: 'rgba(0, 212, 255, 0.3)',
+                    borderColor: COLORS.demand,
+                    borderWidth: 1,
+                    order: 4
+                },
+                {
+                    label: 'Solar',
+                    data: dispatch.solar,
+                    backgroundColor: 'rgba(251, 191, 36, 0.7)',
+                    borderColor: COLORS.solar,
+                    borderWidth: 0,
+                    order: 3
+                },
+                {
+                    label: 'Wind',
+                    data: dispatch.wind,
+                    backgroundColor: 'rgba(6, 182, 212, 0.7)',
+                    borderColor: COLORS.wind,
+                    borderWidth: 0,
+                    order: 2
+                },
+                {
+                    label: 'Generator',
+                    data: dispatch.generator,
+                    backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                    borderColor: COLORS.generator,
+                    borderWidth: 0,
+                    order: 1
+                },
+                {
+                    label: 'Battery SoC (%)',
+                    data: dispatch.soc,
+                    type: 'line',
+                    borderColor: COLORS.purple,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    yAxisID: 'y1',
+                    order: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'top', labels: { font: { size: 11 } } },
+                tooltip: { backgroundColor: 'rgba(26, 34, 53, 0.95)', padding: 12 }
+            },
+            scales: {
+                x: { stacked: true, ticks: { maxTicksLimit: 12, font: { size: 10 } }, grid: { color: 'rgba(42, 58, 92, 0.3)' } },
+                y: { stacked: true, title: { display: true, text: 'Power (kW)' }, grid: { color: 'rgba(42, 58, 92, 0.3)' }, beginAtZero: true },
+                y1: { position: 'right', title: { display: true, text: 'Battery SoC (%)' }, grid: { drawOnChartArea: false }, min: 0, max: 100 }
+            }
+        }
+    });
+}
+
+function updateSimulationUI(data) {
+    if (!data) return;
+
+    // Update conditions display
+    document.getElementById('scTemp').textContent = `${data.conditions.temperature}°C`;
+    document.getElementById('scWind').textContent = `${data.conditions.wind_speed} m/s`;
+    document.getElementById('scSolar').textContent = `${(data.conditions.solar_factor * 100).toFixed(0)}%`;
+    document.getElementById('scSoc').textContent = `${data.conditions.start_soc}%`;
+
+    // Update KPIs
+    const summary = data.summary;
+    document.getElementById('simDiesel').textContent = `${formatNumber(summary.total_diesel_liters)} L`;
+    document.getElementById('simCost').textContent = `${formatNumber(summary.total_cost_rs)}`;
+    document.getElementById('simCO2').textContent = `${formatNumber(summary.total_co2_kg)} kg`;
+    document.getElementById('simRenew').textContent = `${summary.renewable_share}%`;
+
+    // Create chart
+    createSimDispatchChart(data);
+
+    // Update insights
+    const container = document.getElementById('simInsightsContainer');
+    if (container && data.insights) {
+        container.innerHTML = '';
+        data.insights.forEach(insight => {
+            const div = document.createElement('div');
+            div.className = 'insight-item';
+            div.textContent = insight;
+            container.appendChild(div);
+        });
+    }
+}
+
+function setupSimulationTab() {
+    let selectedMode = 'normal';
+
+    // Mode button clicks
+    const modeBtns = document.querySelectorAll('.mode-btn');
+    modeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            modeBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            selectedMode = btn.dataset.mode;
+        });
+    });
+
+    // Run simulation button
+    const runBtn = document.getElementById('runSimBtn');
+    if (runBtn) {
+        runBtn.addEventListener('click', async () => {
+            runBtn.disabled = true;
+            runBtn.textContent = '⏳ Running...';
+
+            const station = document.getElementById('stationSelector').value;
+            const hours = parseInt(document.getElementById('simHours').value);
+
+            const result = await simulateMode(station, selectedMode, hours);
+
+            if (result) {
+                updateSimulationUI(result);
+            } else {
+                alert('Simulation failed. Check console for details.');
+            }
+
+            runBtn.disabled = false;
+            runBtn.textContent = ' Run Simulation';
+        });
+    }
+}
+
 // ===== INITIALIZATION =====
 async function init() {
     // Setup UI
     setupTabs();
     setupStationSelector();
+    setupSimulationTab();
 
     // Initial data load
     const station = document.getElementById('stationSelector').value;
@@ -887,7 +1085,7 @@ async function init() {
         document.getElementById('loadingOverlay').classList.add('hidden');
     }, 1500);
 
-    // Auto-refresh
+    // Auto-refresh (includes current mode)
     setInterval(async () => {
         const currentStation = document.getElementById('stationSelector').value;
         await updateDashboard(currentStation);

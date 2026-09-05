@@ -29,7 +29,7 @@
             <select class="station-selector" id="stationSelector">
                 <option value="Maitri (Antarctica)">🇮🇳 Maitri (Antarctica)</option>
                 <option value="Bharati (Antarctica)">🇮 Bharati (Antarctica)</option>
-                <option value="Himadri (Arctic)">🇮🇳 Himadri (Arctic)</option>
+                <option value="Himadri (Arctic)">🇳 Himadri (Arctic)</option>
             </select>
             <div class="status-badge">
                 <span class="status-dot"></span>
@@ -38,12 +38,33 @@
         </div>
     </header>
 
-    <!-- Main Dashboard -->
     <div class="main-container">
-        
-        <!-- KPI Cards Row 1 -->
+
+        <!-- ===== CURRENT OPERATING MODE CARD ===== -->
+        <div class="mode-status-card" id="currentModeCard">
+            <div class="mode-card-left">
+                <div class="mode-icon" id="modeIcon">🟢</div>
+                <div>
+                    <div class="mode-label">Current Operating Mode</div>
+                    <div class="mode-value" id="modeValue">Initializing...</div>
+                </div>
+            </div>
+            <div class="mode-card-center">
+                <div class="mode-desc" id="modeDesc">Loading system status...</div>
+            </div>
+            <div class="mode-card-right">
+                <div class="mode-conditions">
+                    <div class="cond"><span>🌡️</span><span id="condTemp">--°C</span></div>
+                    <div class="cond"><span>💨</span><span id="condWind">-- m/s</span></div>
+                    <div class="cond"><span>️</span><span id="condSolar">-- kW</span></div>
+                    <div class="cond"><span></span><span id="condSoc">--%</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- KPI Cards Row -->
         <div class="section-header">
-            <span class="section-icon">⚡</span>
+            <span class="section-icon"></span>
             <span class="section-title">Real-Time Energy Status</span>
             <span class="section-badge" id="updateTimestamp">Loading...</span>
         </div>
@@ -90,6 +111,7 @@
         <div class="tab-container">
             <div class="tab active" data-tab="forecasting"> AI Forecasting</div>
             <div class="tab" data-tab="optimization">⚡ Dispatch Optimization</div>
+            <div class="tab" data-tab="simulation"> Simulation Lab</div>
             <div class="tab" data-tab="weather">🌡️ Weather Impact</div>
             <div class="tab" data-tab="annual">📊 Annual Summary</div>
             <div class="tab" data-tab="model"> Model Performance</div>
@@ -105,15 +127,11 @@
             <div class="charts-row">
                 <div class="chart-card">
                     <div class="chart-title">🔌 Energy Demand: Actual vs AI Prediction</div>
-                    <div class="chart-container tall">
-                        <canvas id="demandForecastChart"></canvas>
-                    </div>
+                    <div class="chart-container tall"><canvas id="demandForecastChart"></canvas></div>
                 </div>
                 <div class="chart-card">
                     <div class="chart-title">☀️💨 Renewable Energy Generation Forecast</div>
-                    <div class="chart-container tall">
-                        <canvas id="renewableForecastChart"></canvas>
-                    </div>
+                    <div class="chart-container tall"><canvas id="renewableForecastChart"></canvas></div>
                 </div>
             </div>
         </div>
@@ -125,42 +143,76 @@
                 <span class="section-title">Optimal Energy Dispatch Schedule</span>
                 <span class="section-badge">Next 168 Hours (7 Days)</span>
             </div>
-
             <div class="chart-card" style="margin-bottom: 1.5rem;">
                 <div class="chart-title">📊 Energy Source Dispatch (Optimized)</div>
-                <div class="chart-container tall">
-                    <canvas id="dispatchChart"></canvas>
-                </div>
+                <div class="chart-container tall"><canvas id="dispatchChart"></canvas></div>
             </div>
-
-            <!-- Insights -->
             <div class="insights-panel">
-                <div class="chart-title">💡 AI Optimization Insights</div>
+                <div class="chart-title"> AI Optimization Insights</div>
                 <div id="insightsContainer"></div>
             </div>
-
-            <!-- KPI Summary Cards -->
             <div class="kpi-grid" id="summaryGrid">
-                <div class="kpi-card">
-                    <div class="kpi-icon">💰</div>
-                    <div class="kpi-value" id="sumCostSavings">--</div>
-                    <div class="kpi-label">Cost Savings (7 Days)</div>
+                <div class="kpi-card"><div class="kpi-icon">💰</div><div class="kpi-value" id="sumCostSavings">--</div><div class="kpi-label">Cost Savings (7 Days)</div></div>
+                <div class="kpi-card"><div class="kpi-icon">⛽</div><div class="kpi-value" id="sumFuelSavings">--</div><div class="kpi-label">Fuel Saved</div></div>
+                <div class="kpi-card"><div class="kpi-icon">🌍</div><div class="kpi-value" id="sumCO2">--</div><div class="kpi-label">CO₂ Reduction</div></div>
+                <div class="kpi-card"><div class="kpi-icon">🌱</div><div class="kpi-value" id="sumRenewable">--</div><div class="kpi-label">Renewable Share</div></div>
+            </div>
+        </div>
+
+        <!-- Tab: MODE SIMULATION LAB -->
+        <div class="tab-content" id="tab-simulation">
+            <div class="section-header">
+                <span class="section-icon"></span>
+                <span class="section-title">Mode Simulation Lab — Test Any Operating Scenario</span>
+                <span class="section-badge">Interactive</span>
+            </div>
+
+            <div class="simulator-card">
+                <div class="sim-row">
+                    <div class="sim-section">
+                        <div class="sim-label">Select Operating Mode</div>
+                        <div class="mode-buttons" id="modeButtons">
+                            <button class="mode-btn active" data-mode="normal">✅ Normal</button>
+                            <button class="mode-btn" data-mode="polar_night"> Polar Night</button>
+                            <button class="mode-btn" data-mode="blizzard">️ Blizzard</button>
+                            <button class="mode-btn" data-mode="summer_surge">️ Summer Surge</button>
+                            <button class="mode-btn" data-mode="emergency">️ Emergency</button>
+                        </div>
+                    </div>
+                    <div class="sim-section">
+                        <div class="sim-label">Forecast Horizon</div>
+                        <select class="sim-select" id="simHours">
+                            <option value="24">24 hours (1 day)</option>
+                            <option value="72" selected>72 hours (3 days)</option>
+                            <option value="168">168 hours (7 days)</option>
+                        </select>
+                        <button class="sim-run-btn" id="runSimBtn"> Run Simulation</button>
+                    </div>
                 </div>
-                <div class="kpi-card">
-                    <div class="kpi-icon">⛽</div>
-                    <div class="kpi-value" id="sumFuelSavings">--</div>
-                    <div class="kpi-label">Fuel Saved</div>
+
+                <div class="sim-conditions" id="simConditions">
+                    <div class="sim-cond-item"><div class="sc-label">Temperature</div><div class="sc-value" id="scTemp">--</div></div>
+                    <div class="sim-cond-item"><div class="sc-label">Wind Speed</div><div class="sc-value" id="scWind">--</div></div>
+                    <div class="sim-cond-item"><div class="sc-label">Solar Factor</div><div class="sc-value" id="scSolar">--</div></div>
+                    <div class="sim-cond-item"><div class="sc-label">Initial SoC</div><div class="sc-value" id="scSoc">--</div></div>
                 </div>
-                <div class="kpi-card">
-                    <div class="kpi-icon">🌍</div>
-                    <div class="kpi-value" id="sumCO2">--</div>
-                    <div class="kpi-label">CO₂ Reduction</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-icon">🌱</div>
-                    <div class="kpi-value" id="sumRenewable">--</div>
-                    <div class="kpi-label">Renewable Share</div>
-                </div>
+            </div>
+
+            <div class="kpi-grid" id="simKpiGrid">
+                <div class="kpi-card"><div class="kpi-icon">⛽</div><div class="kpi-value" id="simDiesel">--</div><div class="kpi-label">Diesel Used</div></div>
+                <div class="kpi-card"><div class="kpi-icon">💰</div><div class="kpi-value" id="simCost">--</div><div class="kpi-label">Fuel Cost</div></div>
+                <div class="kpi-card"><div class="kpi-icon">🌍</div><div class="kpi-value" id="simCO2">--</div><div class="kpi-label">CO₂ Emitted</div></div>
+                <div class="kpi-card"><div class="kpi-icon">🌱</div><div class="kpi-value" id="simRenew">--</div><div class="kpi-label">Renewable Share</div></div>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-title">📊 Simulated Energy Dispatch</div>
+                <div class="chart-container tall"><canvas id="simDispatchChart"></canvas></div>
+            </div>
+
+            <div class="insights-panel">
+                <div class="chart-title">💡 Simulation Insights</div>
+                <div id="simInsightsContainer"><div class="insight-item">Select a mode and click "Run Simulation" to see AI-optimized dispatch for that scenario.</div></div>
             </div>
         </div>
 
@@ -174,22 +226,16 @@
             <div class="charts-row">
                 <div class="chart-card">
                     <div class="chart-title">🌡️ Temperature & Energy Demand Correlation</div>
-                    <div class="chart-container">
-                        <canvas id="weatherDemandChart"></canvas>
-                    </div>
+                    <div class="chart-container"><canvas id="weatherDemandChart"></canvas></div>
                 </div>
                 <div class="chart-card">
                     <div class="chart-title">️ Solar Generation vs Day of Year</div>
-                    <div class="chart-container">
-                        <canvas id="solarMonthlyChart"></canvas>
-                    </div>
+                    <div class="chart-container"><canvas id="solarMonthlyChart"></canvas></div>
                 </div>
             </div>
             <div class="chart-card">
                 <div class="chart-title"> Monthly Energy & Weather Trends</div>
-                <div class="chart-container">
-                    <canvas id="monthlyTrendsChart"></canvas>
-                </div>
+                <div class="chart-container"><canvas id="monthlyTrendsChart"></canvas></div>
             </div>
             <div class="insights-panel" style="margin-top: 1rem;">
                 <div class="chart-title">🔍 Weather Impact Analysis</div>
@@ -204,43 +250,17 @@
                 <span class="section-title">Annual Energy Performance Summary</span>
             </div>
             <div class="kpi-grid" id="annualKpiGrid">
-                <div class="kpi-card">
-                    <div class="kpi-icon">⚡</div>
-                    <div class="kpi-value" id="annualDemand">--</div>
-                    <div class="kpi-label">Total Demand (MWh)</div>
-                </div>
-                <div class="kpi-card solar">
-                    <div class="kpi-icon">☀️</div>
-                    <div class="kpi-value" id="annualSolar">--</div>
-                    <div class="kpi-label">Solar Generated (MWh)</div>
-                </div>
-                <div class="kpi-card wind">
-                    <div class="kpi-icon">💨</div>
-                    <div class="kpi-value" id="annualWind">--</div>
-                    <div class="kpi-label">Wind Generated (MWh)</div>
-                </div>
-                <div class="kpi-card fuel">
-                    <div class="kpi-icon"></div>
-                    <div class="kpi-value" id="annualDiesel">--</div>
-                    <div class="kpi-label">Diesel Consumed (kL)</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-icon">🌍</div>
-                    <div class="kpi-value" id="annualCO2">--</div>
-                    <div class="kpi-label">CO₂ Emissions (tonnes)</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-icon">💰</div>
-                    <div class="kpi-value" id="annualCost">--</div>
-                    <div class="kpi-label">Fuel Cost (₹ Lakhs)</div>
-                </div>
+                <div class="kpi-card"><div class="kpi-icon">⚡</div><div class="kpi-value" id="annualDemand">--</div><div class="kpi-label">Total Demand (MWh)</div></div>
+                <div class="kpi-card solar"><div class="kpi-icon">☀️</div><div class="kpi-value" id="annualSolar">--</div><div class="kpi-label">Solar Generated (MWh)</div></div>
+                <div class="kpi-card wind"><div class="kpi-icon">💨</div><div class="kpi-value" id="annualWind">--</div><div class="kpi-label">Wind Generated (MWh)</div></div>
+                <div class="kpi-card fuel"><div class="kpi-icon"></div><div class="kpi-value" id="annualDiesel">--</div><div class="kpi-label">Diesel Consumed (kL)</div></div>
+                <div class="kpi-card"><div class="kpi-icon">🌍</div><div class="kpi-value" id="annualCO2">--</div><div class="kpi-label">CO₂ Emissions (tonnes)</div></div>
+                <div class="kpi-card"><div class="kpi-icon">💰</div><div class="kpi-value" id="annualCost">--</div><div class="kpi-label">Fuel Cost ( Lakhs)</div></div>
             </div>
-
             <div class="resupply-card">
                 <div class="chart-title">🚢 Optimal Fuel Resupply Plan</div>
                 <div class="resupply-timeline" id="resupplyTimeline"></div>
             </div>
-
             <div class="insights-panel">
                 <div class="chart-title"> Impact vs Traditional Diesel-Only Operation</div>
                 <div id="impactInsightsContainer"></div>
@@ -257,24 +277,19 @@
             <div class="charts-row">
                 <div class="chart-card">
                     <div class="chart-title">📊 Feature Importance Ranking</div>
-                    <div class="chart-container">
-                        <canvas id="featureImportanceChart"></canvas>
-                    </div>
+                    <div class="chart-container"><canvas id="featureImportanceChart"></canvas></div>
                 </div>
                 <div class="chart-card">
                     <div class="chart-title"> Model Performance Comparison</div>
-                    <div class="chart-container">
-                        <canvas id="modelPerformanceChart"></canvas>
-                    </div>
+                    <div class="chart-container"><canvas id="modelPerformanceChart"></canvas></div>
                 </div>
             </div>
             <div class="chart-card" style="margin-top: 1rem;">
-                <div class="chart-title">🏗️ System Architecture</div>
+                <div class="chart-title">️ System Architecture</div>
                 <div id="architectureInfo" style="padding: 1rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.8;"></div>
             </div>
         </div>
 
-        <!-- Footer -->
         <div class="footer">
             <p><strong>PolarGrid AI</strong> — AI-Driven Smart Energy Management System for Polar Research Stations</p>
             <p>Problem Statement 26061 | Skill India Hackathon 2026 | Ministry of Earth Sciences (MoES) / NCPOR</p>
@@ -283,5 +298,5 @@
     </div>
 
     <script src="/static/app.js"></script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3628176fc1b0868',t:'MTc4ODU4MjcwMA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
