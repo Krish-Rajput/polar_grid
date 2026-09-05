@@ -77,7 +77,7 @@ NORMAL | POLAR_NIGHT | BLIZZARD | SUMMER_SURGE | EMERGENCY
 
 ```bash
 # Clone the repository
-git clone https://github.com/Krish-Rajput/polar_grid.git
+git clone https://github.com/frostbyte/polar_grid.git
 cd polar_grid
 
 # Install dependencies
@@ -273,6 +273,11 @@ polar_grid/
 
 ### Team Members
 - **Krish Rajput** (Team Leader) — CSE (Data Science)
+- **Harshit Mishra**
+- **Kalash Sharma**
+- **Kartik Chopra**
+- **Devesh Singh**
+- **Krish Tewatia**
 
 ### Mentors
 - **Sovers Singh Bisht**
