@@ -273,11 +273,11 @@ polar_grid/
 
 ### Team Members
 - **Krish Rajput** (Team Leader) — CSE (Data Science)
-- **Harshit Mishra**
-- **Kalash Sharma**
-- **Kartik Chopra**
-- **Devesh Singh**
-- **Krish Tewatia**
+- **Harshit Mishra** - Technical
+- **Kalash Sharma** - Frontend
+- **Kartik Chopra** - Presenter
+- **Devesh Singh**  - Presenter
+- **Krish Tewatia** - Backend
 
 ### Mentors
 - **Sovers Singh Bisht**
