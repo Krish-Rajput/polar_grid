@@ -77,7 +77,7 @@ NORMAL | POLAR_NIGHT | BLIZZARD | SUMMER_SURGE | EMERGENCY
 
 ```bash
 # Clone the repository
-git clone https://github.com/frostbyte/polar_grid.git
+git clone https://github.com/Krish-Rajput/polar_grid.git
 cd polar_grid
 
 # Install dependencies
