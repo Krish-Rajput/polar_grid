@@ -5,8 +5,7 @@ Implements MILP-style dispatch with RL-inspired adaptive logic
 """
 import numpy as np
 import pandas as pd
-from scipy.optimize import linprog
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List
 from dataclasses import dataclass
 from enum import Enum
 
@@ -39,16 +38,72 @@ class StationConfig:
     
     diesel_cost_per_liter: float = 80.0  # ₹ (including transport)
     carbon_per_liter_diesel: float = 2.68  # kg CO2/liter
+    station_name: str = "Generic Polar Station"
+
+# Dedicated hardware profiles for Indian polar stations
+STATION_CONFIGS = {
+    "Bharati (Antarctica)": StationConfig(
+        battery_capacity_kwh=400.0,
+        battery_min_soc=20.0,
+        battery_max_soc=90.0,
+        generator_max_output=375.0,  # 3x 125 kW CHP with heat recovery
+        solar_capacity_kw=120.0,
+        wind_capacity_kw=50.0,
+        critical_load_kw=120.0,
+        non_critical_load_kw=180.0,
+        station_name="Bharati (Antarctica)"
+    ),
+    "Maitri (Antarctica)": StationConfig(
+        battery_capacity_kwh=300.0,
+        battery_min_soc=20.0,
+        battery_max_soc=90.0,
+        generator_max_output=400.0,  # 4x 100 kW DG sets
+        solar_capacity_kw=80.0,
+        wind_capacity_kw=40.0,
+        critical_load_kw=150.0,  # Higher due to Priyadarshini water pipeline trace heating
+        non_critical_load_kw=190.0,
+        station_name="Maitri (Antarctica)"
+    ),
+    "Himadri (Arctic)": StationConfig(
+        battery_capacity_kwh=250.0,
+        battery_min_soc=20.0,
+        battery_max_soc=90.0,
+        generator_max_output=300.0,
+        solar_capacity_kw=60.0,
+        wind_capacity_kw=40.0,
+        critical_load_kw=90.0,
+        non_critical_load_kw=130.0,
+        station_name="Himadri (Arctic)"
+    )
+}
+
+def get_station_config(station_name: str) -> StationConfig:
+    for key, cfg in STATION_CONFIGS.items():
+        if key.lower() in station_name.lower() or station_name.lower() in key.lower():
+            return cfg
+    return STATION_CONFIGS["Maitri (Antarctica)"]
 
 class EnergyOptimizer:
     """
     Intelligent energy dispatch optimizer
-    Uses hybrid MILP + rule-based RL approach
+    Uses hybrid MILP + rule-based RL approach with Polar Physics constraints
     """
     
     def __init__(self, config: StationConfig = None):
         self.config = config or StationConfig()
         self.dispatch_log = []
+
+    def get_effective_battery_capacity(self, temperature: float) -> float:
+        """
+        Sub-zero electrochemical thermal derating (Arrhenius effect).
+        Cold Antarctic temperatures reduce Li-ion effective usable capacity.
+        """
+        if temperature >= -10.0:
+            derating = 1.0
+        else:
+            # Derate 1.2% per degree below -10 C, max 35% reduction
+            derating = 1.0 - min(0.35, 0.012 * (-10.0 - temperature))
+        return self.config.battery_capacity_kwh * derating
     
     def determine_operating_mode(self, forecast: Dict) -> OperatingMode:
         """
@@ -59,9 +114,10 @@ class EnergyOptimizer:
         temperature = forecast.get('temperature', -20)
         wind_speed = forecast.get('wind_speed', 15)
         battery_soc = forecast.get('battery_soc', 50)
+        blizzard_risk = forecast.get('blizzard_risk', 0.0)
         
-        # Blizzard detection
-        if wind_speed > 25:
+        # Blizzard early warning detection (risk > 60% or extreme wind > 22 m/s)
+        if blizzard_risk > 0.60 or wind_speed >= 22.0:
             return OperatingMode.BLIZZARD
         
         # Emergency: battery critically low
@@ -144,14 +200,10 @@ class EnergyOptimizer:
                 # Maximize renewable, charge battery
                 if renewable_available > demand:
                     excess = renewable_available - demand
-                    # Charge battery with excess
                     charge_possible = (self.config.battery_max_soc - soc) / 100 * self.config.battery_capacity_kwh
                     actual_charge = min(excess, charge_possible)
                     soc += actual_charge / self.config.battery_capacity_kwh * 100
                     curtailed = excess - actual_charge
-                    
-                    # Use excess for water desalination (shifted load)
-                    # This is the "smart" behavior
                 else:
                     gen_output = 0
                     battery_output = 0
@@ -159,7 +211,6 @@ class EnergyOptimizer:
             elif mode == OperatingMode.POLAR_NIGHT:
                 # Conserve battery, optimize generator
                 if deficit > 0:
-                    # Use battery strategically (don't drain too fast)
                     safe_discharge = min(
                         deficit * 0.5,
                         (soc - self.config.battery_min_soc) / 100 * self.config.battery_capacity_kwh * self.config.battery_discharge_rate
@@ -180,27 +231,25 @@ class EnergyOptimizer:
                     
             elif mode == OperatingMode.BLIZZARD:
                 # Safety first: generators only, protect renewables
-                gen_output = demand  # All generator
-                curtailed = renewable_available  # Can't use renewables in extreme wind
+                gen_output = demand
+                curtailed = renewable_available
                 
             elif mode == OperatingMode.EMERGENCY:
                 # Emergency: all generators, shed non-critical
                 gen_output = demand
                 if soc < 10:
-                    shed = self.config.non_critical_load_kw * 0.5  # Shed 50% non-critical
+                    shed = self.config.non_critical_load_kw * 0.5
                     gen_output = max(gen_output - shed, self.config.critical_load_kw)
                     
             else:  # NORMAL
                 # Balanced approach
                 if deficit <= 0:
-                    # Excess renewable
                     excess = -deficit
                     charge_possible = (self.config.battery_max_soc - soc) / 100 * self.config.battery_capacity_kwh
                     actual_charge = min(excess, charge_possible)
                     soc += actual_charge / self.config.battery_capacity_kwh * 100
                     curtailed = max(0, excess - actual_charge)
                 else:
-                    # Need supplemental power
                     safe_discharge = min(
                         deficit * 0.5,
                         max(0, (soc - self.config.battery_min_soc) / 100 * self.config.battery_capacity_kwh * self.config.battery_discharge_rate)
@@ -271,9 +320,9 @@ class EnergyOptimizer:
                 'cost_savings_rs': round(cost_savings, 2),
                 'co2_reduction_kg': round(co2_reduction_kg, 1),
                 'renewable_share': round(avg_renewable_share * 100, 1),
-                'avg_soc': round(np.mean(dispatch['soc_after']), 1),
+                'avg_soc': round(float(np.mean(dispatch['soc_after'])), 1),
                 'peak_demand_kw': round(max(dispatch['demand_kw']), 1),
-                'avg_demand_kw': round(np.mean(dispatch['demand_kw']), 1),
+                'avg_demand_kw': round(float(np.mean(dispatch['demand_kw'])), 1),
                 'curtailment_kwh': round(sum(dispatch['curtailed_kw']), 1),
                 'baseline_diesel_liters': round(baseline_diesel, 1),
                 'baseline_cost_rs': round(baseline_cost, 2)
@@ -285,17 +334,18 @@ class EnergyOptimizer:
         Generate optimal fuel resupply schedule
         Returns recommended resupply dates and quantities
         """
-        monthly_diesel = annual_data['diesel_consumption_liters'].resample('ME').sum()
-        
-        # Find optimal resupply windows (summer, when ships can reach stations)
-        # Antarctic: resupply Nov-Feb
-        # Arctic: resupply Jun-Sep
-        
+        if 'diesel_consumption_liters' in annual_data.columns:
+            diesel_series = annual_data['diesel_consumption_liters']
+        else:
+            solar_s = annual_data['solar_generation_kw'] if 'solar_generation_kw' in annual_data.columns else 0
+            wind_s = annual_data['wind_generation_kw'] if 'wind_generation_kw' in annual_data.columns else 0
+            net_deficit = (annual_data['total_demand_kw'] - solar_s - wind_s).clip(lower=0)
+            diesel_series = net_deficit * 0.26
+
+        monthly_diesel = diesel_series.resample('ME').sum()
         monthly_dict = monthly_diesel.to_dict()
-        
         total_annual = monthly_diesel.sum()
         
-        # Recommend resupply schedule
         resupply_events = []
         
         # Primary resupply (summer)
@@ -360,7 +410,7 @@ class EnergyOptimizer:
         insights.append(f"🌍 {co2:,.0f} kg CO₂ emissions avoided during this period")
         
         cost = summary['cost_savings_rs']
-        insights.append(f"{cost:,.0f} saved in fuel costs through intelligent dispatch")
+        insights.append(f"₹{cost:,.0f} saved in fuel costs through intelligent dispatch")
         
         soc = summary['avg_soc']
         if soc < 30:
@@ -372,22 +422,24 @@ class EnergyOptimizer:
 
 
 if __name__ == "__main__":
-    from data_simulator import PolarDataSimulator
+    # Test block initialized with Numpy arrays for standalone validation (No Synthetic File Loaders)
+    print("Testing Optimizer module with generic arrays...")
+    n_hours = 168
     
-    # Test the optimizer
-    simulator = PolarDataSimulator(station_type="antarctica", seed=42)
-    df = simulator.generate_hourly_data(days=7)  # 1 week
+    mock_demand = np.full(n_hours, 160.0) + np.sin(np.linspace(0, 10 * np.pi, n_hours)) * 30
+    mock_solar = np.maximum(0, np.sin(np.linspace(0, 7 * np.pi, n_hours)) * 60)
+    mock_wind = np.random.uniform(5, 20, n_hours)
     
-    optimizer = EnergyOptimizer()
+    optimizer = EnergyOptimizer(STATION_CONFIGS["Bharati (Antarctica)"])
     
     result = optimizer.optimize_dispatch(
-        demand_forecast=df['total_demand_kw'].values,
-        solar_forecast=df['solar_generation_kw'].values,
-        wind_forecast=df['wind_generation_kw'].values,
+        demand_forecast=mock_demand,
+        solar_forecast=mock_solar,
+        wind_forecast=mock_wind,
         current_soc=60.0,
-        temperature=-20,
-        wind_speed=15,
-        hours_ahead=24 * 7
+        temperature=-15,
+        wind_speed=12,
+        hours_ahead=n_hours
     )
     
     print("\n=== Energy Optimization Results (1 Week) ===")
@@ -397,10 +449,3 @@ if __name__ == "__main__":
     print("\n=== Insights ===")
     for insight in optimizer.get_optimization_insights(result):
         print(f"  {insight}")
-    
-    print("\n=== Resupply Plan ===")
-    plan = optimizer.generate_resupply_plan(df)
-    print(f"  Total annual diesel: {plan['total_annual_diesel']:.0f} liters")
-    print(f"  Total annual cost: ₹{plan['total_annual_cost']:,.0f}")
-    for event in plan['resupply_events']:
-        print(f"  {event['window']}: {event['fuel_liters']} liters in {event['month_name']}")

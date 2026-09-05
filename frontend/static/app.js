@@ -75,9 +75,9 @@ async function fetchDashboardData(station) {
     }
 }
 
-async function fetchModelPerformance() {
+async function fetchModelPerformance(station = "Bharati (Antarctica)") {
     try {
-        const response = await fetch('/api/model-performance');
+        const response = await fetch(`/api/model-performance?station=${encodeURIComponent(station)}`);
         if (!response.ok) throw new Error(`API returned ${response.status}`);
         return await response.json();
     } catch (error) {
@@ -86,9 +86,9 @@ async function fetchModelPerformance() {
     }
 }
 
-async function fetchWeatherImpact() {
+async function fetchWeatherImpact(station = "Bharati (Antarctica)") {
     try {
-        const response = await fetch('/api/weather-impact');
+        const response = await fetch(`/api/weather-impact?station=${encodeURIComponent(station)}`);
         if (!response.ok) throw new Error(`API returned ${response.status}`);
         return await response.json();
     } catch (error) {
@@ -97,7 +97,7 @@ async function fetchWeatherImpact() {
     }
 }
 
-async function fetchAnnualSummary(station) {
+async function fetchAnnualSummary(station = "Bharati (Antarctica)") {
     try {
         const url = `/api/annual-summary?station=${encodeURIComponent(station)}`;
         const response = await fetch(url);
@@ -105,6 +105,18 @@ async function fetchAnnualSummary(station) {
         return await response.json();
     } catch (error) {
         console.error('Annual summary fetch error:', error);
+        return null;
+    }
+}
+
+async function fetchBlizzardWarning(station = "Bharati (Antarctica)") {
+    try {
+        const url = `/api/blizzard-warning?station=${encodeURIComponent(station)}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`API returned ${response.status}`);
+        return await response.json();
+    } catch (error) {
+        console.error('Blizzard warning fetch error:', error);
         return null;
     }
 }
@@ -214,7 +226,7 @@ function createDemandForecastChart(data) {
                     bodyColor: '#f1f5f9',
                     padding: 12,
                     callbacks: {
-                        label: function(ctx) {
+                        label: function (ctx) {
                             if (ctx.parsed.y === null) return null;
                             return `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} kW`;
                         }
@@ -805,26 +817,125 @@ function updateArchitectureInfo(data) {
     `;
 }
 
+// ===== MODE CARD & BLIZZARD DEFENSE BANNER =====
+function updateCurrentModeCard(dashboardData) {
+    if (!dashboardData || !dashboardData.dispatch) return;
+    const mode = (dashboardData.dispatch.mode && dashboardData.dispatch.mode.length > 0) ? dashboardData.dispatch.mode[0] : 'normal';
+    const recent = dashboardData.recent_data;
+    const n = recent.demand.length;
+
+    const temp = recent.temperature ? recent.temperature[n - 1] : -20;
+    const wind = recent.wind ? recent.wind[n - 1] : 10;
+    const solar = recent.solar ? recent.solar[n - 1] : 0;
+    const soc = recent.battery_soc ? recent.battery_soc[n - 1] : 70;
+
+    const modeConfig = {
+        normal: { icon: '🟢', label: 'NORMAL OPERATION', desc: 'Balanced economic dispatch prioritizing renewables and battery storage' },
+        polar_night: { icon: '🌙', label: 'POLAR NIGHT MODE', desc: 'Zero solar generation. Generator running at fuel-efficient steady output with battery peak-shaving' },
+        blizzard: { icon: '⚠️', label: 'BLIZZARD DEFENSE MODE', desc: 'Extreme winds / storm warning. Turbine cut-out failsafe active, battery pre-charged to 95%' },
+        summer_surge: { icon: '☀️', label: 'SUMMER SURGE (MIDNIGHT SUN)', desc: '24-hour solar generation. Maximizing renewable penetration and water desalination buffering' },
+        emergency: { icon: '🚨', label: 'CRITICAL EMERGENCY LOAD SHEDDING', desc: 'Battery SoC depleted below 15%. All diesel generators active, non-critical research loads shed' }
+    };
+
+    const cfg = modeConfig[mode] || modeConfig.normal;
+    const iconEl = document.getElementById('modeIcon');
+    const valEl = document.getElementById('modeValue');
+    const descEl = document.getElementById('modeDesc');
+
+    if (iconEl) iconEl.textContent = cfg.icon;
+    if (valEl) valEl.textContent = cfg.label;
+    if (descEl) descEl.textContent = cfg.desc;
+
+    if (document.getElementById('condTemp')) document.getElementById('condTemp').textContent = `${temp}°C`;
+    if (document.getElementById('condWind')) document.getElementById('condWind').textContent = `${wind} m/s`;
+    if (document.getElementById('condSolar')) document.getElementById('condSolar').textContent = `${solar} kW`;
+    if (document.getElementById('condSoc')) document.getElementById('condSoc').textContent = `${soc}%`;
+}
+
+function updateBlizzardBanner(blizzardData, station, modelData, dashboardData) {
+    if (!blizzardData) return;
+
+    const banner = document.getElementById('blizzardBanner');
+    const badge = document.getElementById('blizzardBadge');
+    const statusText = document.getElementById('blizzardRiskStatus');
+    const riskPct = document.getElementById('blizzardRiskPct');
+    const meterFill = document.getElementById('blizzardMeterFill');
+    const actionText = document.getElementById('defenseActionText');
+    const battText = document.getElementById('effectiveBatteryText');
+    const accuracyTag = document.getElementById('modelAccuracyTag');
+    const datasetTag = document.getElementById('stationDatasetTag');
+
+    const prob = blizzardData.max_risk_24h_probability != null ? blizzardData.max_risk_24h_probability : (blizzardData.current_risk_probability || 0);
+    if (riskPct) riskPct.textContent = `${prob.toFixed(1)}%`;
+    if (meterFill) {
+        meterFill.style.width = `${Math.min(100, Math.max(5, prob))}%`;
+        if (prob >= 60) {
+            meterFill.className = 'blizzard-meter-fill severe';
+        } else {
+            meterFill.className = 'blizzard-meter-fill';
+        }
+    }
+
+    if (prob >= 60) {
+        if (banner) banner.classList.add('alert-active');
+        if (badge) {
+            badge.className = 'blizzard-badge alert';
+            statusText.textContent = 'BLIZZARD IMMINENT';
+        }
+    } else if (prob >= 30) {
+        if (banner) banner.classList.remove('alert-active');
+        if (badge) {
+            badge.className = 'blizzard-badge';
+            statusText.textContent = 'KATABATIC WATCH';
+        }
+    } else {
+        if (banner) banner.classList.remove('alert-active');
+        if (badge) {
+            badge.className = 'blizzard-badge';
+            statusText.textContent = 'POLAR DEFENSE ACTIVE';
+        }
+    }
+
+    if (blizzardData.autonomous_defense_actions && blizzardData.autonomous_defense_actions.length > 0) {
+        if (actionText) actionText.textContent = blizzardData.autonomous_defense_actions[0];
+    }
+
+    if (dashboardData && dashboardData.station_profile) {
+        const derated = dashboardData.station_profile.battery_derating;
+        const nom = dashboardData.station_profile.hardware.battery_capacity_kwh;
+        if (battText) battText.textContent = `${derated} kWh / ${nom} kWh (Derated at Ambient Temp)`;
+    }
+
+    if (modelData && modelData.load_forecasting && modelData.load_forecasting.ensemble) {
+        const r2 = modelData.load_forecasting.ensemble.r2;
+        const mae = modelData.load_forecasting.ensemble.mae;
+        if (accuracyTag) accuracyTag.textContent = `Dedicated ML R²: ${r2.toFixed(3)} | MAE: ${mae.toFixed(1)} kW`;
+    }
+}
+
 // ===== MAIN UPDATE FUNCTION =====
 async function updateDashboard(station) {
     try {
-        const [dashboardData, modelData, weatherData, annualData, modeData] = await Promise.all([
+        const [dashboardData, modelData, weatherData, annualData, blizzardData] = await Promise.all([
             fetchDashboardData(station),
-            fetchModelPerformance(),
-            fetchWeatherImpact(),
+            fetchModelPerformance(station),
+            fetchWeatherImpact(station),
             fetchAnnualSummary(station),
-            fetchCurrentMode(station)
+            fetchBlizzardWarning(station)
         ]);
 
-        if (modeData) updateCurrentModeCard(modeData);
-
         if (dashboardData) {
+            updateCurrentModeCard(dashboardData);
             updateKPIs(dashboardData);
             createDemandForecastChart(dashboardData);
             createRenewableForecastChart(dashboardData);
             createDispatchChart(dashboardData);
             updateInsights(dashboardData);
             updateSummaryKPIs(dashboardData);
+        }
+
+        if (blizzardData) {
+            updateBlizzardBanner(blizzardData, station, modelData, dashboardData);
         }
 
         if (weatherData) {
@@ -876,17 +987,6 @@ function setupStationSelector() {
 }
 
 // ===== CURRENT MODE FUNCTIONS =====
-async function fetchCurrentMode(station) {
-    try {
-        const response = await fetch(`/api/current-mode?station=${encodeURIComponent(station)}`);
-        if (!response.ok) return null;
-        return await response.json();
-    } catch (error) {
-        console.error('Current mode fetch error:', error);
-        return null;
-    }
-}
-
 async function simulateMode(station, mode, hours) {
     try {
         const response = await fetch(`/api/simulate-mode?station=${encodeURIComponent(station)}&mode=${mode}&hours_ahead=${hours}`, {
@@ -898,29 +998,6 @@ async function simulateMode(station, mode, hours) {
         console.error('Simulation error:', error);
         return null;
     }
-}
-
-function updateCurrentModeCard(data) {
-    if (!data) return;
-
-    const icon = document.getElementById('modeIcon');
-    const value = document.getElementById('modeValue');
-    const desc = document.getElementById('modeDesc');
-
-    icon.textContent = data.mode_icon;
-    value.textContent = data.mode_label;
-    value.style.color = data.mode_color;
-    desc.textContent = data.mode_description;
-
-    // Update card border color
-    const card = document.getElementById('currentModeCard');
-    card.style.borderLeftColor = data.mode_color;
-
-    // Update conditions
-    document.getElementById('condTemp').textContent = `${data.conditions.temperature}°C`;
-    document.getElementById('condWind').textContent = `${data.conditions.wind_speed} m/s`;
-    document.getElementById('condSolar').textContent = `${data.conditions.solar_kw} kW`;
-    document.getElementById('condSoc').textContent = `${data.conditions.battery_soc}%`;
 }
 
 function createSimDispatchChart(data) {
@@ -1012,7 +1089,7 @@ function updateSimulationUI(data) {
     // Update KPIs
     const summary = data.summary;
     document.getElementById('simDiesel').textContent = `${formatNumber(summary.total_diesel_liters)} L`;
-    document.getElementById('simCost').textContent = `${formatNumber(summary.total_cost_rs)}`;
+    document.getElementById('simCost').textContent = `₹${formatNumber(summary.total_cost_rs)}`;
     document.getElementById('simCO2').textContent = `${formatNumber(summary.total_co2_kg)} kg`;
     document.getElementById('simRenew').textContent = `${summary.renewable_share}%`;
 
@@ -1060,12 +1137,17 @@ function setupSimulationTab() {
             if (result) {
                 updateSimulationUI(result);
             } else {
-                alert('Simulation failed. Check console for details.');
+                alert('Simulation failed. Check the backend terminal for details.');
             }
 
             runBtn.disabled = false;
             runBtn.textContent = ' Run Simulation';
         });
+
+        // Auto-populate the Simulation Lab on first load
+        setTimeout(() => {
+            runBtn.click();
+        }, 500);
     }
 }
 
